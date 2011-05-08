@@ -1,0 +1,89 @@
+<!--   
+Copyright 2011 The Buzz Media, LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+<project name="cloudfront-log-parser" default="dist">
+	<property name="dir.src" value="src/main/java" />
+	<property name="dir.bin" value="bin" />
+	<property name="dir.lib" value="lib" />
+	<property name="dir.docs" value="docs" />
+	<property name="dir.dist" value="dist" />
+	<property name="dir.javadoc" value="${dir.dist}/${dir.docs}/javadoc" />
+	
+	<path id="classpath">
+		<pathelement path="${dir.lib}/tbm-common-lib-2.0.jar" />
+		<pathelement path="${dir.lib}/tbm-common-parser-lib-1.1.jar" />
+	</path>
+	
+	<property name="version.major" value="1" />
+	<property name="version.minor" value="1" />
+
+	<property name="name.file" value="cloudfront-log-parser" />
+	<property name="name.file.javadoc" value="${name.file}-${version.major}.${version.minor}-javadoc.jar" />
+	<property name="name.file.src" value="${name.file}-${version.major}.${version.minor}-sources.jar" />
+
+	<target name="clean">
+		<delete dir="${dir.bin}" />
+		<delete dir="${dir.dist}" />
+
+		<mkdir dir="${dir.bin}" />
+		<mkdir dir="${dir.dist}" />
+	</target>
+
+	<target name="compile" depends="clean">
+		<javac srcdir="${dir.src}" destdir="${dir.bin}" debug="true" source="1.5" target="1.5" classpathref="classpath" />
+		<copy todir="${dir.bin}">
+			<fileset dir="${dir.src}">
+				<exclude name="**/*.java" />
+			</fileset>
+		</copy>
+	</target>
+
+	<target name="javadoc">
+		<delete dir="${dir.javadoc}" />
+		<mkdir dir="${dir.javadoc}" />
+		<javadoc sourcepath="${dir.src}" classpathref="classpath" destdir="${dir.javadoc}" author="true" 
+			windowtitle="common-parser-lib v${version.major}.${version.minor} - The Buzz Media Common Parser Library" 
+			footer="Copyright 2011 The Buzz Media, LLC"	linksource="true" package="true" 
+			source="1.5" use="true">
+			
+			<link href="http://download.oracle.com/javase/1.5.0/docs/api/" />
+			<link href="http://thebuzzmedia.com/downloads/software/common-lib/javadoc/" />
+			<link href="http://thebuzzmedia.com/downloads/software/common-parser-lib/javadoc/" />
+		</javadoc>
+	</target>
+
+	<target name="jar" depends="compile">
+		<jar basedir="${dir.bin}" destfile="${dir.dist}/${name.file}-${version.major}.${version.minor}.jar" compress="no" />
+	</target>
+
+	<target name="src">
+		<delete file="${dir.dist}/${name.file}-${version.major}.${version.minor}-src.zip" />
+		<jar compress="yes" basedir="${dir.src}" destfile="${dir.dist}/${name.file.src}" />
+	</target>
+
+	<target name="dist" depends="compile,javadoc,jar,src">
+		<copy file="README" todir="${dir.dist}" />
+		<copy file="LICENSE" todir="${dir.dist}" />
+		<copy todir="${dir.dist}/${dir.lib}">
+			<fileset dir="${dir.lib}" />
+		</copy>
+		<copy todir="${dir.dist}/${dir.docs}">
+			<fileset dir="${dir.docs}" />
+		</copy>
+		
+		<jar compress="yes" basedir="${dir.javadoc}" destfile="${dir.dist}/${name.file.javadoc}" />
+		<zip compress="yes" basedir="${dir.dist}" destfile="${dir.dist}/${name.file}-${version.major}.${version.minor}.zip" />
+	</target>
+</project>

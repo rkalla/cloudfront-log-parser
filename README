@@ -1,0 +1,119 @@
+Amazon CloudFront Log Parser (CLP)
+http://www.thebuzzmedia.com/software/cloudfront-log-parser/
+
+
+Changelog
+---------
+1.1
+	* Initial public release.
+
+
+License
+-------
+This library is released under the Apache 2 License. See LICENSE.
+
+
+Description
+-----------
+CloudFront Log Parser (CLP) is a low-complexity, high-performance CloudFront log
+parser (for both Download and Streaming log formats) written in Java.
+
+CLP was written with simplicity in mind and intended for integration in anything
+from a desktop log-analysis app to a long-running log-processing server app;
+anything that needs to grind through CloudFront access log files.
+
+CLP's API was designed with the existing AWS Java JDK in mind and ensuring that
+integration would fit simply and naturally; no confusing setup or complex 
+nonsense. More specifically, CLP is meant to directly consume raw InputStream's
+for the stored .gz log files.
+
+Since CloudFront stores it's log files on S3 in a specified bucket, that means
+integrated closely with the S3Object.getObjectContent() method:
+http://docs.amazonwebservices.com/AWSJavaSDK/latest/javadoc/com/amazonaws/services/s3/model/S3Object.html#getObjectContent() 
+ 
+Parsing log files from CloudFront is no more complex than getting an S3Object
+and passing it's "objectContent" InputStream to the LogParser.parse method along
+with a custom callback used to handle the parsed entry.
+
+CloudFront Log Parser was tuned through extensive profiling to be as tight as
+possible without compromising:
+
+* Extremely high throughput
+* Logical, consistent behavior
+
+What is meant by the 2nd point is that another 10% performance could have been
+squeezed out of CLP by making ILogEntry instances returned from the parser 
+ephemeral. This would have allowed the same wrapper ILogEntry instance to 
+literally be used over and over again, only being valid for the scope of the
+Callback implementation.
+
+Having my own *extremely* negative experiences with APIs like this in the past
+that exhibited "magical" behavior which lead to bugs, it was decided that
+decisions like these would not be sacrificed. 
+
+The API has to be as fast as possible while being logically consistent and
+intuitive to use. If a developer starts hunting through Javadocs, Source or
+Documentation to understand why the library is behaving a certain way, I would
+consider that a failure on the part of the software for not "doing the right 
+thing". 
+
+This library is deployed in a production environment at http://imgscalr.com
+
+
+Performance
+-----------
+Benchmarks can be found in the /src/test/java folder and can be run directly
+from the command line (no need to setup JUnit).
+
+[Platform]
+* Java 1.6.0_24 on Windows 7 64-bit 
+* Dual Core Intel E6850 processor
+* 8 GB of ram
+
+[Benchmark Results]
+Parsed 100 Log Entries in 42ms (2,380 entries / sec)
+Parsed 100,000 Log Entries in 835ms (119,760 entries / sec)
+Parsed 1,000,000 Log Entries in 6320ms (158,227 entries / sec)
+
+The Amazon CloudFront docs say log files are truncated at a maximum size of 50MB 
+(uncompressed) before they are written out to the log directory. This is roughly
+equivalent to a file with 200,000 entries in it (the 100k test file is 29MB
+uncompressed). 
+
+
+Runtime Requirements
+--------------------
+The Buzz Media common-lib
+http://www.thebuzzmedia.com/software/common-lib-common-java-utility-library/
+
+This is the "tbm-common-lib" JAR in the /lib directory.
+
+
+History
+-------
+After deploying apps that utilized CloudFront for content delivery, I had the
+need to parse the resulting access logs to get an idea of what kind of traffic,
+bandwidth and access patterns the content was receiving.
+
+Amazon promotes the use of their Map/Reduce Hadoop-based log parser multiple 
+times on their site, but that requires additional EC2 charges to run.
+
+After about a week of prototyping and engineering I had initial versions of the
+CloudFront Log Parser written and running. Initial "does it work" prototypes took
+an afternoon, but I toyed with a multitude of different API designs and 
+architectures.
+
+Eventually settling on what was by far the cleanest and simplest API to understand
+and use, I began to slowly tighten the code up, using HPROF extensively to
+ensure the library wasn't doing dump things.
+
+After getting things tightened up to the point that I found no shortcomings in the
+API or bugs in the code, this project was opened-sourced.
+
+I hope it helps you too.
+
+
+Contact
+-------
+If you have questions, comments or bug reports for this software please contact
+us at: software@thebuzzmedia.com
