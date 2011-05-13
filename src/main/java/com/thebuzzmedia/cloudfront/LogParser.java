@@ -4,54 +4,64 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.zip.GZIPInputStream;
 
+import com.thebuzzmedia.common.IToken;
 import com.thebuzzmedia.common.charset.DecodingUtils;
 import com.thebuzzmedia.common.lexer.CharArrayTokenizer;
-import com.thebuzzmedia.common.lexer.IToken;
-import com.thebuzzmedia.common.lexer.ITokenizer;
+import com.thebuzzmedia.common.lexer.IDelimitedTokenizer;
 import com.thebuzzmedia.common.util.ArrayUtils;
 
 public class LogParser {
-	public static final String GZIP_BUFFER_SIZE_PROPERTY_NAME = "cloudfront.logparser.gzipBufferSize";
 	public static final String BUFFER_SIZE_PROPERTY_NAME = "cloudfront.logparser.bufferSize";
-
-	// TODO: Maybe consider bigger defaults since this will run on a server
-	public static final int GZIP_BUFFER_SIZE = Integer.getInteger(
-			GZIP_BUFFER_SIZE_PROPERTY_NAME, 32768);
+	public static final String GZIP_BUFFER_SIZE_PROPERTY_NAME = "cloudfront.logparser.gzipBufferSize";
 
 	public static final int BUFFER_SIZE = Integer.getInteger(
 			BUFFER_SIZE_PROPERTY_NAME, 32768);
+
+	public static final int GZIP_BUFFER_SIZE = Integer.getInteger(
+			GZIP_BUFFER_SIZE_PROPERTY_NAME, 32768);
 
 	public static final byte LF = 10; // \n
 
 	public static final char[] DELIMITERS = { ' ', '\t', '\r', '\n' };
 
-	private static final int MIN_GZIP_BUFFER_SIZE = 1024;
 	private static final int MIN_BUFFER_SIZE = 1024;
+	private static final int MIN_GZIP_BUFFER_SIZE = 1024;
+
 	private static final char[] FIELDS_DIRECTIVE_PREFIX = { '#', 'F', 'i', 'e',
 			'l', 'd', 's', ':' };
 
+	/**
+	 * Map containing a collection of field names that belong only to DOWNLOAD
+	 * distribution log files or STREAMING distribution log files. In order for
+	 * the parser to auto-detect the type of log it is parsing, it uses this map
+	 * to do a quick-match of unique field names. Once the log file type is
+	 * determined, the parser knows how to parse and store the repsective field
+	 * values.
+	 */
 	private static final Map<String, ILogEntry.Type> LOG_TYPE_DETECTION_MAP = new HashMap<String, ILogEntry.Type>(
 			32);
 
 	static {
 		// Init system properties
-		if (GZIP_BUFFER_SIZE <= MIN_GZIP_BUFFER_SIZE)
+		if (BUFFER_SIZE <= MIN_BUFFER_SIZE)
 			throw new RuntimeException(
-					"GZIP_BUFFER_SIZE (sys prop "
-							+ GZIP_BUFFER_SIZE_PROPERTY_NAME
-							+ ") is currently set below the min allowed value of "
+					"System property '"
+							+ BUFFER_SIZE_PROPERTY_NAME
+							+ "' is currently set below the min allowed value of "
 							+ MIN_GZIP_BUFFER_SIZE
 							+ ". You must increase this value for the parser to operate correctly.");
 
-		if (BUFFER_SIZE <= MIN_BUFFER_SIZE)
+		if (GZIP_BUFFER_SIZE <= MIN_GZIP_BUFFER_SIZE)
 			throw new RuntimeException(
-					"BUFFER_SIZE (sys prop "
-							+ BUFFER_SIZE_PROPERTY_NAME
-							+ ") is currently set below the min allowed value of "
+					"System property '"
+							+ GZIP_BUFFER_SIZE_PROPERTY_NAME
+							+ "' is currently set below the min allowed value of "
 							+ MIN_GZIP_BUFFER_SIZE
 							+ ". You must increase this value for the parser to operate correctly.");
 
@@ -76,18 +86,29 @@ public class LogParser {
 	private byte[] buffer;
 
 	private ILogEntry.Type logType;
-	private ILogEntry logEntryWrapper;
 
-	private ITokenizer<char[]> tokenizer;
+	private ILogEntry logEntryWrapper;
+	private ILogEntry downloadLogEntryWrapper;
+	private ILogEntry streamingLogEntryWrapper;
+
 	private List<String> parsedFieldNames;
 	private List<Integer> activeFieldIndices;
+	private Set<Integer> skippedFieldPositionSet;
+	private IDelimitedTokenizer<char[], char[]> tokenizer;
 
 	public LogParser() {
 		buffer = new byte[BUFFER_SIZE];
 		tokenizer = new CharArrayTokenizer();
+
+		// Pre-alloc the two wrapper instances this parser will ever use
+		downloadLogEntryWrapper = new DownloadLogEntry();
+		streamingLogEntryWrapper = new StreamingLogEntry();
+
+		// Pre-size both lists to the max possible size (streaming field count)
 		parsedFieldNames = new ArrayList<String>(ILogEntry.MAX_STREAMING_FIELDS);
 		activeFieldIndices = new ArrayList<Integer>(
 				ILogEntry.MAX_STREAMING_FIELDS);
+		skippedFieldPositionSet = new HashSet<Integer>();
 	}
 
 	public String toString() {
@@ -107,10 +128,12 @@ public class LogParser {
 		tokenizer.reset();
 		parsedFieldNames.clear();
 		activeFieldIndices.clear();
+		skippedFieldPositionSet.clear();
 	}
 
 	public void parse(InputStream stream, ILogParserCallback callback)
-			throws IllegalArgumentException, IOException, RuntimeException {
+			throws IllegalArgumentException, IOException,
+			MalformedContentException, RuntimeException {
 		if (stream == null)
 			throw new IllegalArgumentException("stream cannot be null");
 		if (callback == null)
@@ -164,7 +187,7 @@ public class LogParser {
 					length);
 
 			if (lfIndex == -1)
-				throw new RuntimeException(
+				throw new MalformedContentException(
 						"Could not find the \\n (LINE FEED) character after scanning "
 								+ length
 								+ " bytes from the read buffer (read cycle "
@@ -241,15 +264,27 @@ public class LogParser {
 				index = 0;
 			}
 		}
+
+		try {
+			/*
+			 * Try to cleanly close our internal GZip stream without percolating
+			 * a generic "I can't read this" IOException up to the caller. We
+			 * want to reserve IOExceptions for read errors.
+			 */
+			gzipStream.close();
+		} catch (IOException e) {
+			throw new RuntimeException(
+					"An exception occurred while trying to close the interal GZipInputStream wrapping the given source InputStream. Please ensure the source InputStream is closed now and the VM should GC the failed streams.");
+		}
 	}
 
 	protected void parseFieldsDirective(char[] line, int index, int length,
-			ILogParserCallback callback) {
+			ILogParserCallback callback) throws MalformedContentException {
 		IToken<char[]> token = null;
 
 		// Init the tokenizer so we can parse the line easily.
-		tokenizer.setSource(line, DELIMITERS,
-				ITokenizer.DelimiterType.MATCH_ANY, index, length);
+		tokenizer.setSource(line, index, length, DELIMITERS,
+				IDelimitedTokenizer.DelimiterMode.MATCH_ANY);
 
 		/*
 		 * We parse all the field names out of the #Fields directive, detecting
@@ -258,11 +293,11 @@ public class LogParser {
 		 * ILogEntry.
 		 */
 		while ((token = tokenizer.nextToken()) != null) {
-			// Skip the value of it's the initial directive
+			// Skip "#Fields:" token, get to the field names.
 			if (token.getSource()[token.getIndex()] == '#')
 				continue;
 
-			String name = token.toString();
+			String name = new String(token.getValue());
 
 			// Use the name to try and determine the log type if needed
 			if (logType == null)
@@ -273,19 +308,19 @@ public class LogParser {
 
 		// Make sure we determined the logType by now, otherwise we can't work.
 		if (logType == null)
-			throw new RuntimeException(
-					"Unable to determine the type of log we are parsing from looking at the given #Fields directive from line: "
+			throw new MalformedContentException(
+					"Unable to determine the type of log we are parsing from looking at names in the '#Fields:' directive: "
 							+ new String(line, index, length));
-		else {
-			switch (logType) {
-			case DOWNLOAD:
-				logEntryWrapper = new DownloadLogEntry();
-				break;
 
-			case STREAMING:
-				logEntryWrapper = new StreamingLogEntry();
-				break;
-			}
+		// Assign the appropriate wrapper that we will be using
+		switch (logType) {
+		case DOWNLOAD:
+			logEntryWrapper = downloadLogEntryWrapper;
+			break;
+
+		case STREAMING:
+			logEntryWrapper = streamingLogEntryWrapper;
+			break;
 		}
 
 		/*
@@ -308,7 +343,15 @@ public class LogParser {
 				break;
 			}
 
-			if (fieldIndex != null)
+			/*
+			 * It is possible that Amazon writes out field names we don't know
+			 * how to parse yet, so we skip adding them to our active field
+			 * list, but we remember the position the unknown field was add so
+			 * we can avoid the associated values later.
+			 */
+			if (fieldIndex == null)
+				skippedFieldPositionSet.add(Integer.valueOf(i));
+			else
 				activeFieldIndices.add(fieldIndex);
 		}
 	}
@@ -317,9 +360,12 @@ public class LogParser {
 			ILogParserCallback callback) {
 		IToken<char[]> token = null;
 
+		// Reset the wrapper
+		logEntryWrapper.reset();
+
 		// Init the tokenizer so we can parse the line easily.
-		tokenizer.setSource(line, DELIMITERS,
-				ITokenizer.DelimiterType.MATCH_ANY, index, length);
+		tokenizer.setSource(line, index, length, DELIMITERS,
+				IDelimitedTokenizer.DelimiterMode.MATCH_ANY);
 
 		/*
 		 * Keep track of the index of the value we are parsing, this is how we
@@ -327,9 +373,17 @@ public class LogParser {
 		 */
 		int valueIndex = 0;
 
-		while ((token = tokenizer.nextToken()) != null)
-			logEntryWrapper.setFieldValue(activeFieldIndices.get(valueIndex++),
-					token.getValue());
+		while ((token = tokenizer.nextToken()) != null) {
+			// Ensure this value didn't belong to a skipped field name
+			if (skippedFieldPositionSet.contains(Integer.valueOf(valueIndex))) {
+				valueIndex++;
+				continue;
+			}
+
+			// Value belonged to an active field, so store it.
+			logEntryWrapper.setFieldValue(activeFieldIndices.get(valueIndex++)
+					.intValue(), token.getValue());
+		}
 
 		// Notify the callback of the parsed values
 		callback.logEntryParsed(logEntryWrapper);

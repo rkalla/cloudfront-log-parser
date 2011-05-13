@@ -10,7 +10,7 @@ public class DownloadLogEntry extends AbstractLogEntry {
 			"cs-uri-query" };
 
 	protected static final Map<String, Integer> FIELD_INDEX_MAP = new HashMap<String, Integer>(
-			13 * 5);
+			MAX_DOWNLOAD_FIELDS * 5);
 
 	static {
 		for (int i = 0; i < FIELD_NAMES.length; i++)
@@ -27,14 +27,10 @@ public class DownloadLogEntry extends AbstractLogEntry {
 
 	public int getFieldIndex(String fieldName) {
 		Integer index = FIELD_INDEX_MAP.get(fieldName);
-		return (index == null ? null : index.intValue());
+		return (index == null ? INVALID_INDEX : index.intValue());
 	}
 
-	public char[] getFieldValue(String fieldName) throws IllegalArgumentException {
-		if (fieldName == null || fieldName.length() == 0)
-			throw new IllegalArgumentException(
-					"fieldName cannot be null or empty");
-
+	public char[] getFieldValue(String fieldName) {
 		Integer index = FIELD_INDEX_MAP.get(fieldName);
 		return (index == null ? null : values[index.intValue()]);
 	}

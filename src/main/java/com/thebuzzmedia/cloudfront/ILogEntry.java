@@ -3,6 +3,8 @@ package com.thebuzzmedia.cloudfront;
 public interface ILogEntry {
 	public static final int MAX_DOWNLOAD_FIELDS = 13;
 	public static final int MAX_STREAMING_FIELDS = 17;
+	
+	public static final int INVALID_INDEX = -1;
 
 	public static final char EMPTY_VALUE_FLAG = '-';
 
@@ -22,8 +24,7 @@ public interface ILogEntry {
 
 	public char[] getFieldValue(int fieldIndex) throws IllegalArgumentException;
 
-	public char[] getFieldValue(String fieldName)
-			throws IllegalArgumentException;
+	public char[] getFieldValue(String fieldName);
 
 	public char[][] getFieldValues();
 

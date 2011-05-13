@@ -23,11 +23,11 @@ limitations under the License.
 	
 	<path id="classpath">
 		<pathelement path="${dir.lib}/tbm-common-lib-2.0.jar" />
-		<pathelement path="${dir.lib}/tbm-common-parser-lib-1.1.jar" />
+		<pathelement path="${dir.lib}/tbm-common-parser-lib-2.0.jar" />
 	</path>
 	
 	<property name="version.major" value="1" />
-	<property name="version.minor" value="1" />
+	<property name="version.minor" value="2" />
 
 	<property name="name.file" value="cloudfront-log-parser" />
 	<property name="name.file.javadoc" value="${name.file}-${version.major}.${version.minor}-javadoc.jar" />

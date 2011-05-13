@@ -4,6 +4,31 @@ http://www.thebuzzmedia.com/software/cloudfront-log-parser/
 
 Changelog
 ---------
+1.2
+	* More secure exception handling inside of Parse ensures cleanup of any 
+	temporary input streams.
+	
+	* Improved the exception semantics of the parse method.
+	https://github.com/thebuzzmedia/cloudfront-log-parser/issues/2
+	
+	* Parser is more verbal with MalformedContentException errors when the content
+	of the log file doesn't match the Amazon-defined DOWNLOAD or STREAMING 
+	CloudFront log formats.
+	https://github.com/thebuzzmedia/cloudfront-log-parser/issues/2
+	
+	* Fixed incorrect bounds check for insertion of fields beyond what ILogEntry
+	will allow.
+	https://github.com/thebuzzmedia/cloudfront-log-parser/issues/5
+	
+	* Fixed a handful of "tightening" bugs that didn't break the parser previously
+	but could lead to leaks or bugs down the road.
+	 
+	* Addition Javadoc to the source was added to make it more clear what certain
+	constructs are for.
+	
+	* Added a new file to the benchmark that matches a worst-case-scenario log
+	file from CloudFront (50MB uncompressed, ~174k entries)
+
 1.1
 	* Initial public release.
 
@@ -15,49 +40,56 @@ This library is released under the Apache 2 License. See LICENSE.
 
 Description
 -----------
-CloudFront Log Parser (CLP) is a low-complexity, high-performance CloudFront log
-parser (for both Download and Streaming log formats) written in Java.
+CloudFront Log Parser is a Java library offering a low-complexity, 
+high-performance, adaptive CloudFront log parser for both the Download and 
+Streaming CloudFront log formats.
 
-CLP was written with simplicity in mind and intended for integration in anything
-from a desktop log-analysis app to a long-running log-processing server app;
-anything that needs to grind through CloudFront access log files.
+The library is "adaptive" in the sense that it determines the format of the
+log files at parse time, you don't need to tell it, and it is additionally
+resilient in that it can skip unknown Field names and values while parsing
+instead of throwing an exception. This is important if the library is ever
+deployed in a production setting and Amazon changes the CloudFront log format
+before a new version of the library is read.
 
-CLP's API was designed with the existing AWS Java JDK in mind and ensuring that
-integration would fit simply and naturally; no confusing setup or complex 
-nonsense. More specifically, CLP is meant to directly consume raw InputStream's
-for the stored .gz log files.
+CloudFront Log Parser's API was designed with the existing AWS Java JDK in mind 
+and ensuring that integration would fit naturally. More specifically, the API 
+can directly consume raw InputStream for the stored .gz log files on S3 directly 
+from the S3Object.getObjectContent() method.
 
-Since CloudFront stores it's log files on S3 in a specified bucket, that means
-integrated closely with the S3Object.getObjectContent() method:
-http://docs.amazonwebservices.com/AWSJavaSDK/latest/javadoc/com/amazonaws/services/s3/model/S3Object.html#getObjectContent() 
- 
-Parsing log files from CloudFront is no more complex than getting an S3Object
-and passing it's "objectContent" InputStream to the LogParser.parse method along
-with a custom callback used to handle the parsed entry.
+That being said, the API is coded to accept ANY InputStream; whether you are 
+processing local copies and passing FileInputStreams or processing remote 
+copies; it just happened to be particularly easy to integrate it with the AWS
+Java SDK.
 
-CloudFront Log Parser was tuned through extensive profiling to be as tight as
-possible without compromising:
+CloudFront Log Parser is intended to be used in any deployment scenario from a
+desktop analysis app to a long-running server process environment.
 
-* Extremely high throughput
-* Logical, consistent behavior
 
-What is meant by the 2nd point is that another 10% performance could have been
-squeezed out of CLP by making ILogEntry instances returned from the parser 
-ephemeral. This would have allowed the same wrapper ILogEntry instance to 
-literally be used over and over again, only being valid for the scope of the
-Callback implementation.
+Design
+-----------
+CloudFront Log Parser was designed, first and foremost, to be as fast as 
+possible with as little memory allocation as possible so as to work smoothly
+in a long-running server log-processing usage scenario.
 
-Having my own *extremely* negative experiences with APIs like this in the past
-that exhibited "magical" behavior which lead to bugs, it was decided that
-decisions like these would not be sacrificed. 
+Object creation is kept to a minimum during parsing (no matter how big the
+parse job) by re-using a single ILogEntry instance, per LogParser, to wrap
+parsed line values and report those to the given ILogParserCallback.
 
-The API has to be as fast as possible while being logically consistent and
-intuitive to use. If a developer starts hunting through Javadocs, Source or
-Documentation to understand why the library is behaving a certain way, I would
-consider that a failure on the part of the software for not "doing the right 
-thing". 
+The ILogEntry instance received by the callbacks is ephemeral; in that the 
+ILogEntry instance is only valid for the scope of the callback's method. Once
+returned from that method, the ILogEntry instance is reused and the values it
+holds are swapped.
 
-This library is deployed in a production environment at http://imgscalr.com
+*** CALLBACKS SHOULD NEVER HOLD ONTO ILOGENTRY INSTANCES! ***
+
+However, the values reported by the callbacks are copies and can be safely
+stored.
+
+This design was chosen because over large parse jobs for busy sites, where 
+millions of log entries would not be uncommon, the heap memory savings and
+performance improvement because of this design would be noticeable. The VM
+would not be thrown into longer GC cycles as it attempted to clean up the
+millions of useless objects that were so short lived. 
 
 
 Performance
@@ -71,23 +103,36 @@ from the command line (no need to setup JUnit).
 * 8 GB of ram
 
 [Benchmark Results]
-Parsed 100 Log Entries in 42ms (2,380 entries / sec)
-Parsed 100,000 Log Entries in 835ms (119,760 entries / sec)
-Parsed 1,000,000 Log Entries in 6320ms (158,227 entries / sec)
+Parsed 100 Log Entries in 27ms (3703 entries / sec)
+Parsed 100,000 Log Entries in 864ms (115740 entries / sec)
+Parsed 174,200 Log Entries in 1341ms (129903 entries / sec)
+Parsed 1,000,000 Log Entries in 7520ms (132978 entries / sec)
 
 The Amazon CloudFront docs say log files are truncated at a maximum size of 50MB 
-(uncompressed) before they are written out to the log directory. This is roughly
-equivalent to a file with 200,000 entries in it (the 100k test file is 29MB
-uncompressed). 
+(uncompressed) before they are written out to the log directory. The 3rd test,
+parsing the 174k log entries is exactly 50MB uncompressed and matches this
+worst-case-scenario. 
+
+This means that using CloudFront Log Parser to parse the largest log files that
+CloudFront will write out to your S3 bucket, you can parse that file in a little
+over a second on equivalent hardware.
+
+If you are running on beefier server hardware, you can increase that rate and
+if you are parsing logs in a multi-threaded environment (1 thread per LogParser)
+you can increase that rate my magnitudes.
+
+CloudFront Log Parser is fast.  
 
 
 Runtime Requirements
 --------------------
-The Buzz Media common-lib
-http://www.thebuzzmedia.com/software/common-lib-common-java-utility-library/
 
-This is the "tbm-common-lib" JAR in the /lib directory.
+1.	The Buzz Media common-lib (tbm-common-lib-<VER>.jar)
+	http://www.thebuzzmedia.com/software/common-lib-common-java-utility-library/
 
+2.	The Buzz Media common-pars-erlib (tbm-common-parser-lib-<VER>.jar)
+	http://www.thebuzzmedia.com/software/common-parser-lib-common-parser-java-utility-library/
+	
 
 History
 -------
@@ -101,16 +146,13 @@ times on their site, but that requires additional EC2 charges to run.
 After about a week of prototyping and engineering I had initial versions of the
 CloudFront Log Parser written and running. Initial "does it work" prototypes took
 an afternoon, but I toyed with a multitude of different API designs and 
-architectures.
+approaches trying to best balance an easy-to-use API with runtime performance.
 
-Eventually settling on what was by far the cleanest and simplest API to understand
-and use, I began to slowly tighten the code up, using HPROF extensively to
-ensure the library wasn't doing dump things.
+Eventually settling on what was by far the cleanest and simplest API, I used
+HPROF to tighten up the runtime performance and minimize object creation down to
+the bare minimum.
 
-After getting things tightened up to the point that I found no shortcomings in the
-API or bugs in the code, this project was opened-sourced.
-
-I hope it helps you too.
+I hope this helps folks out there.
 
 
 Contact

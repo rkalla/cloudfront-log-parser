@@ -1,9 +1,7 @@
 package com.thebuzzmedia.cloudfront;
 
-
 public abstract class AbstractLogEntry implements ILogEntry {
 	protected Type type;
-	// protected char[][] values;
 	protected char[][] values;
 
 	public AbstractLogEntry(Type type, char[][] values)
@@ -12,7 +10,7 @@ public abstract class AbstractLogEntry implements ILogEntry {
 			throw new IllegalArgumentException("type cannot be null");
 		if (values == null || values.length == 0)
 			throw new IllegalArgumentException(
-					"values cannot be null or empty and must represent one IToken<char[]> instance for each field value.");
+					"values cannot be null or empty and must represent an array of one char[] instance for each field value.");
 
 		this.type = type;
 		this.values = values;
@@ -50,7 +48,7 @@ public abstract class AbstractLogEntry implements ILogEntry {
 	}
 
 	public char[] getFieldValue(int fieldIndex) throws IllegalArgumentException {
-		if (fieldIndex < 0 || fieldIndex > values.length)
+		if (fieldIndex < 0 || fieldIndex >= values.length)
 			throw new IllegalArgumentException("fieldIndex [" + fieldIndex
 					+ "] must be >= 0 and < getFieldCount() [" + values.length
 					+ "]");
@@ -64,12 +62,12 @@ public abstract class AbstractLogEntry implements ILogEntry {
 
 	public void setFieldValue(int fieldIndex, char[] value)
 			throws IllegalArgumentException {
-		if (fieldIndex < 0 || fieldIndex > values.length)
+		if (fieldIndex < 0 || fieldIndex >= values.length)
 			throw new IllegalArgumentException("fieldIndex [" + fieldIndex
 					+ "] must be >= 0 and < getFieldCount() [" + values.length
 					+ "]");
 
-		// Translate unusable values to null
+		// Convert all unusable or empty values to null
 		if (value != null
 				&& (value.length == 0 || (value.length == 1 && value[0] == EMPTY_VALUE_FLAG)))
 			value = null;

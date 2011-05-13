@@ -16,6 +16,7 @@ public class LogParserBenchmark {
 		try {
 			parse100();
 			parse100k();
+			parse174k();
 			parse1000k();
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -45,6 +46,18 @@ public class LogParserBenchmark {
 		t = System.currentTimeMillis() - t;
 		System.out.println("Parsed 100,000 Log Entries in " + t + "ms ("
 				+ (100000 * 1000 / t) + " entries / sec)");
+	}
+
+	public static void parse174k() throws IllegalArgumentException,
+			IOException, RuntimeException {
+		long t = System.currentTimeMillis();
+
+		PARSER.parse(LogParserBenchmark.class
+				.getResourceAsStream("samples/example-174k.gz"), CALLBACK);
+
+		t = System.currentTimeMillis() - t;
+		System.out.println("Parsed 174,200 Log Entries in " + t + "ms ("
+				+ (174200 * 1000 / t) + " entries / sec)");
 	}
 
 	public static void parse1000k() throws IllegalArgumentException,
