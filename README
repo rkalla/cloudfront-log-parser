@@ -28,6 +28,8 @@ Changelog
 	
 	* Added a new file to the benchmark that matches a worst-case-scenario log
 	file from CloudFront (50MB uncompressed, ~174k entries)
+	
+	* Added library to The Buzz Media's Maven repo.
 
 1.1
 	* Initial public release.
