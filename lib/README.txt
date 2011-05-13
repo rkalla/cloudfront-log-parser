@@ -6,4 +6,4 @@ Dependency Requirements
 	* (REQUIRED) tbm-common-parser-lib-<VER>.jar
 	
 * Testing
-	* (REQUIRED) junit-4.8.2.jar
+	* (REQUIRED) junit-<VER>.jar
