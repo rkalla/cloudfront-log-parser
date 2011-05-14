@@ -4,7 +4,12 @@ http://www.thebuzzmedia.com/software/cloudfront-log-parser/
 
 Changelog
 ---------
-1.2
+1.3
+	* Improved performance by using new feature in tbm-common-parser-lib that
+	allows a tokenizer to re-use the same IToken for every token event instead
+	of creating a new one.
+	
+1.2	
 	* More secure exception handling inside of Parse ensures cleanup of any 
 	temporary input streams.
 	

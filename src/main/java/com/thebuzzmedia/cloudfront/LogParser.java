@@ -115,6 +115,14 @@ public class LogParser {
 		buffer = new byte[BUFFER_SIZE];
 		tokenizer = new CharArrayTokenizer();
 
+		/*
+		 * Have tokenizer re-use the same IToken<char[]> instance when reporting
+		 * tokens to us down in the parseLogEntry method. We don't expose the
+		 * underlying token outside of this class and we don't store it, so we
+		 * can save on memory allocation and CPU time by doing this.
+		 */
+		tokenizer.setReuseToken(true);
+
 		// Pre-alloc the two wrapper instances this parser will ever use
 		downloadLogEntryWrapper = new DownloadLogEntry();
 		streamingLogEntryWrapper = new StreamingLogEntry();

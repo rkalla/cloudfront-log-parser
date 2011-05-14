@@ -27,7 +27,7 @@ limitations under the License.
 	</path>
 	
 	<property name="version.major" value="1" />
-	<property name="version.minor" value="2" />
+	<property name="version.minor" value="3" />
 
 	<property name="name.file" value="cloudfront-log-parser" />
 	<property name="name.file.javadoc" value="${name.file}-${version.major}.${version.minor}-javadoc.jar" />
