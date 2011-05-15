@@ -21,6 +21,7 @@ import java.util.Map;
 public class StreamingLogEntry extends AbstractLogEntry {
 	// TODO: Define every one of these as public static final Strings that can
 	// be used to identify the col name for callers.
+	// TODO: Also define index constants for folks wanting to query by position.
 	protected static final String[] FIELD_NAMES = { "date", "time",
 			"x-edge-location", "c-ip", "x-event", "sc-bytes", "x-cf-status",
 			"x-cf-client-id", "cs-uri-stem", "cs-uri-query", "c-referrer",

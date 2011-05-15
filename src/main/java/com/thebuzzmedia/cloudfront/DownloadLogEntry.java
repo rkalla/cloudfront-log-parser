@@ -21,6 +21,7 @@ import java.util.Map;
 public class DownloadLogEntry extends AbstractLogEntry {
 	// TODO: Define every one of these as public static final Strings that can
 	// be used to identify the col name for callers.
+	// TODO: Also define index constants for folks wanting to query by position.
 	protected static final String[] FIELD_NAMES = { "date", "time",
 			"x-edge-location", "sc-bytes", "c-ip", "cs-method", "cs(Host)",
 			"cs-uri-stem", "sc-status", "cs(Referer)", "cs(User-Agent)",
