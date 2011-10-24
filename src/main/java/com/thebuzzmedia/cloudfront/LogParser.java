@@ -25,10 +25,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.zip.GZIPInputStream;
 
-import com.thebuzzmedia.common.IToken;
 import com.thebuzzmedia.common.charset.DecodingUtils;
-import com.thebuzzmedia.common.lexer.CharArrayTokenizer;
-import com.thebuzzmedia.common.lexer.IDelimitedTokenizer;
+import com.thebuzzmedia.common.io.CharArrayInput;
+import com.thebuzzmedia.common.parser.IDelimitedTokenizer;
+import com.thebuzzmedia.common.parser.IDelimitedTokenizer.DelimiterMode;
+import com.thebuzzmedia.common.parser.IToken;
+import com.thebuzzmedia.common.parser.general.CharArrayTokenizer;
 import com.thebuzzmedia.common.util.ArrayUtils;
 
 public class LogParser {
@@ -98,6 +100,9 @@ public class LogParser {
 	private int index;
 	private int length;
 	private int readCount;
+
+	// TODO: Is this needed anymore? Likely abstracted out by IInput or the
+	// parser itself.
 	private byte[] buffer;
 
 	private ILogEntry.Type logType;
@@ -109,11 +114,10 @@ public class LogParser {
 	private List<String> parsedFieldNames;
 	private List<Integer> activeFieldIndices;
 	private Set<Integer> skippedFieldPositionSet;
-	private IDelimitedTokenizer<char[], char[]> tokenizer;
+	private IDelimitedTokenizer<char[], char[], Void, char[], char[]> tokenizer;
 
 	public LogParser() {
 		buffer = new byte[BUFFER_SIZE];
-		tokenizer = new CharArrayTokenizer();
 
 		/*
 		 * Have tokenizer re-use the same IToken<char[]> instance when reporting
@@ -121,9 +125,9 @@ public class LogParser {
 		 * underlying token outside of this class and we don't store it, so we
 		 * can save on memory allocation and CPU time by doing this.
 		 */
-		tokenizer.setReuseToken(true);
+		tokenizer = new CharArrayTokenizer(true);
 
-		// Pre-alloc the two wrapper instances this parser will ever use
+		// Pre-allocate the two wrapper instances this parser will ever use
 		downloadLogEntryWrapper = new DownloadLogEntry();
 		streamingLogEntryWrapper = new StreamingLogEntry();
 
@@ -255,7 +259,7 @@ public class LogParser {
 						break;
 					}
 
-					// Update startIndex pointer
+					// Update startIndex pointer to point at next line.
 					sIndex = eIndex + 1;
 				}
 			}
@@ -303,11 +307,13 @@ public class LogParser {
 
 	protected void parseFieldsDirective(char[] line, int index, int length,
 			ILogParserCallback callback) throws MalformedContentException {
-		IToken<char[]> token = null;
+		IToken<Void, char[], char[]> token = null;
 
 		// Init the tokenizer so we can parse the line easily.
-		tokenizer.setSource(line, index, length, DELIMITERS,
-				IDelimitedTokenizer.DelimiterMode.MATCH_ANY);
+		tokenizer.setInput(new CharArrayInput(line, index, length), DELIMITERS,
+				DelimiterMode.MATCH_ANY);
+		// tokenizer.setSource(line, index, length, DELIMITERS,
+		// IDelimitedTokenizer.DelimiterMode.MATCH_ANY);
 
 		/*
 		 * We parse all the field names out of the #Fields directive, detecting
@@ -332,7 +338,7 @@ public class LogParser {
 		// Make sure we determined the logType by now, otherwise we can't work.
 		if (logType == null)
 			throw new MalformedContentException(
-					"Unable to determine the type of log we are parsing from looking at names in the '#Fields:' directive: "
+					"Unable to determine the type of log we are parsing from looking at names in the #Fields: directive: "
 							+ new String(line, index, length));
 
 		// Assign the appropriate wrapper that we will be using
@@ -366,13 +372,16 @@ public class LogParser {
 				break;
 			}
 
+			System.out.println("Field Name: '" + parsedFieldNames.get(i)
+					+ "', index: " + fieldIndex);
+
 			/*
 			 * It is possible that Amazon writes out field names we don't know
 			 * how to parse yet, so we skip adding them to our active field
-			 * list, but we remember the position the unknown field was add so
-			 * we can avoid the associated values later.
+			 * list, but we remember the position of the unknown field was add
+			 * so we can avoid the associated values later.
 			 */
-			if (fieldIndex == null)
+			if (fieldIndex == null || fieldIndex.intValue() == -1)
 				skippedFieldPositionSet.add(Integer.valueOf(i));
 			else
 				activeFieldIndices.add(fieldIndex);
@@ -381,14 +390,18 @@ public class LogParser {
 
 	protected void parseLogEntry(char[] line, int index, int length,
 			ILogParserCallback callback) {
-		IToken<char[]> token = null;
+		System.out.println("Line: " + new String(line, index, length));
+
+		IToken<Void, char[], char[]> token = null;
 
 		// Reset the wrapper
 		logEntryWrapper.reset();
 
 		// Init the tokenizer so we can parse the line easily.
-		tokenizer.setSource(line, index, length, DELIMITERS,
-				IDelimitedTokenizer.DelimiterMode.MATCH_ANY);
+		tokenizer.setInput(new CharArrayInput(line, index, length), DELIMITERS,
+				DelimiterMode.MATCH_ANY);
+		// tokenizer.setSource(line, index, length, DELIMITERS,
+		// IDelimitedTokenizer.DelimiterMode.MATCH_ANY);
 
 		/*
 		 * Keep track of the index of the value we are parsing, this is how we
