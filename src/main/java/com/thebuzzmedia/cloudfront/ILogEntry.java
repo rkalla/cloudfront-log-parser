@@ -16,7 +16,7 @@
 package com.thebuzzmedia.cloudfront;
 
 public interface ILogEntry {
-	public static final int MAX_DOWNLOAD_FIELDS = 13;
+	public static final int MAX_DOWNLOAD_FIELDS = 15;
 	public static final int MAX_STREAMING_FIELDS = 17;
 	
 	public static final int INVALID_INDEX = -1;

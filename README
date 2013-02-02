@@ -4,6 +4,10 @@ http://www.thebuzzmedia.com/software/cloudfront-log-parser/
 
 Changelog
 ---------
+1.4
+	* Fixed Issue #11 - IllegalArgumentException while parsing newer CF log format.
+	* Fixed Issue #12 - Supporting new CF log fields.
+	
 1.3
 	* Improved performance by using new feature in tbm-common-parser-lib that
 	allows a tokenizer to re-use the same IToken for every token event instead
@@ -47,54 +51,62 @@ This library is released under the Apache 2 License. See LICENSE.
 
 Description
 -----------
-CloudFront Log Parser is a Java library offering a simple, high-performance and 
-adaptive log parser for both the Download and Streaming CloudFront log formats.
+CloudFront Log Parser is a Java library offering a low-complexity, 
+high-performance, adaptive CloudFront log parser for both the Download and 
+Streaming CloudFront log formats.
 
-The simplicity and adaptivity of the CloudFront Log Parser comes from the 
-following two features of the library:
+The library is "adaptive" in the sense that it determines the format of the
+log files at parse time, you don't need to tell it, and it is additionally
+resilient in that it can skip unknown Field names and values while parsing
+instead of throwing an exception. This is important if the library is ever
+deployed in a production setting and Amazon changes the CloudFront log format
+before a new version of the library is read.
 
-	* Auto-detection of the log format at parse-time.
-	* Ability to detect and ignore (until support is added) new or corrupt field 
-	names and values that Amazon may add.
+CloudFront Log Parser's API was designed with the existing AWS Java JDK in mind 
+and ensuring that integration would fit naturally. More specifically, the API 
+can directly consume raw InputStream for the stored .gz log files on S3 directly 
+from the S3Object.getObjectContent() method.
 
-#1 makes the library easy to use (a single LogParser class) and #2 makes the 
-library safe to deploy in long-running environments (e.g. a log-processing server) 
-without worrying that one day Amazon may roll out a change to the log format and 
-suddenly your log-processing server is throwing so many exceptions the VM halts.
+That being said, the API is coded to accept ANY InputStream; whether you are 
+processing local copies and passing FileInputStreams or processing remote 
+copies; it just happened to be particularly easy to integrate it with the AWS
+Java SDK.
 
-The CloudFront Log Parser API was designed to be simple to use and flexible 
-enough to plug into any use-case. The LogParser class itself consumes raw 
-InputStreams from the .gz log files. No need to wrap the streams with buffers or 
-worry about them being local or remote resources; the parser doesn't care.
-
-Because of this design, the CloudFront Log Parser integrates really easily with 
-Amazon's existing AWS Java SDK as the library can consume the InputStreams coming 
-directly from the S3 API's S3Object.getObjectContent() method.
-
-The CloudFront Log Parser is intended to be used in any deployment scenario.
+CloudFront Log Parser is intended to be used in any deployment scenario from a
+desktop analysis app to a long-running server process environment.
 
 
-What Problem Does this Solve?
------------------------------
-Amazon promotes the use of their Elastic MapReduce product for processing 
-CloudFront logs, which is a good suggestion if you don't mind incurring the 
-additional cost of using more AWS services.
+Design
+-----------
+CloudFront Log Parser was designed, first and foremost, to be as fast as 
+possible with as little memory allocation as possible so as to work smoothly
+in a long-running server log-processing usage scenario.
 
-For folks wanting to parse the logs themselves (e.g. they already have a server 
-available) there are not (any?) Java-based solutions online and hand-writing a 
-log parser that is efficient and tightened up correctly so it can run unhindered 
-in a headless environment without stopping is not a simple thing to knock out 
-in an afternoon.
+Object creation is kept to a minimum during parsing (no matter how big the
+parse job) by re-using a single ILogEntry instance, per LogParser, to wrap
+parsed line values and report those to the given ILogParserCallback.
 
-The CloudFront Log Parser Java Library solves that problem by providing an 
-extremely fast and simple-to-integrate library meant to make parsing CloudFront 
-log files easy.
+The ILogEntry instance received by the callbacks is ephemeral; in that the 
+ILogEntry instance is only valid for the scope of the callback's method. Once
+returned from that method, the ILogEntry instance is reused and the values it
+holds are swapped.
+
+*** CALLBACKS SHOULD NEVER HOLD ONTO ILOGENTRY INSTANCES! ***
+
+However, the values reported by the callbacks are copies and can be safely
+stored.
+
+This design was chosen because over large parse jobs for busy sites, where 
+millions of log entries would not be uncommon, the heap memory savings and
+performance improvement because of this design would be noticeable. The VM
+would not be thrown into longer GC cycles as it attempted to clean up the
+millions of useless objects that were so short lived. 
 
 
 Performance
 -----------
-Benchmarks can be found in the /src/test/java folder of the source tree and
-can be run directly from the command line.
+Benchmarks can be found in the /src/test/java folder and can be run directly
+from the command line (no need to setup JUnit).
 
 [Platform]
 * Java 1.6.0_24 on Windows 7 64-bit 
@@ -108,77 +120,19 @@ Parsed 174,200 Log Entries in 1341ms (129903 entries / sec)
 Parsed 1,000,000 Log Entries in 7520ms (132978 entries / sec)
 
 The Amazon CloudFront docs say log files are truncated at a maximum size of 50MB 
-(uncompressed) before they are written out to the log directory. The 3rd test, 
-parsing the 174k log entries is exactly 50MB uncompressed and matches this 
-worst-case-scenario. That means using the CloudFront Log Parser Java Library, 
-you can parse a 50MB log file in a little over a second on equivalent hardware.
+(uncompressed) before they are written out to the log directory. The 3rd test,
+parsing the 174k log entries is exactly 50MB uncompressed and matches this
+worst-case-scenario. 
 
-If you are running on faster server hardware your single-threaded rate will be 
-higher than what you see here. If you decide to parse logs in a heavily-threaded 
-environment (1 LogParser instance per Thread) then your parse rates could be 
-magnitudes times faster.
+This means that using CloudFront Log Parser to parse the largest log files that
+CloudFront will write out to your S3 bucket, you can parse that file in a little
+over a second on equivalent hardware.
 
-The CloudFront Log Parser Java Library was engineered to be very efficient.
+If you are running on beefier server hardware, you can increase that rate and
+if you are parsing logs in a multi-threaded environment (1 thread per LogParser)
+you can increase that rate my magnitudes.
 
-
-Design
------------
-CloudFront Log Parser was designed, first and foremost, to execute as fast as 
-possible with as little memory allocation as possible to avoid thrashing the 
-host VM running it. It was designed from the ground up to be effective at parsing 
-huge volumes of log entries.
-
-Object creation is kept to a minimum during parsing (no matter how big or long 
-the parse operation) by re-using a single ILogEntry instance (either DownloadLogEntry 
-or StreamingLogEntry depending on the log type), per LogParser instance. The 
-ILogEntry instance is re-used every time a log entry line is parsed and 
-delivered to the caller-provided ILogParserCallback instead of creating a new 
-ILogEntry instance every single time.
-
-The trade-off for this performance optimization is that the ILogEntry instances 
-are volatile. The instance is valid for the scope of the call to the callback, 
-but once that callback method returns, the ILogEntry is reused by the parser and 
-values inside of it reset and re-populated.
-
-ILogParserCallback implementations should never hold onto ILogEntry instances. 
-Pull the values out of them, store/process/manipulate those instead.
-
-Even though the ILogEntry instances themselves are volatile, the values returned 
-by the getFieldValues methods are safe to store or keep references to.
-
-This design was chosen to ensure that long-running, high-volume log processing 
-jobs avoided creating millions of garbage objects that would cause the host VM 
-to trash on long GC cycles; slowing the log processing and increasing volatility 
-in the VM (e.g. starving heap space from other processes running inside the same VM).
-
-
-Usage
------
-The CloudFront Log Parser Java Library is built on a callback-based model of 
-execution; more specifically, you create a LogParser instance and an 
-implementation of ILogParserCallback to handle each parsed log line, then pass 
-the callback and a raw InputStream pointing at the log file to LogParser.parse(…) 
-and you can sit back and receive parsed log lines in your handler method.
-
-Execution would look like this:
-
-	LogParser parser = new LogParser();
-	InputStream stream = null;
-	
-	parser.parse(stream, new ILogParserCallback() {
-		public void logEntryParsed(ILogEntry entry) {
-			String ip = new String(entry.getFieldValue("c-ip"));
-			String file = new String(entry.getFieldValue("cs-uri-stem"));
-			String bytes = new String(entry.getFieldValue("sc-bytes"));
-	
-			System.out.println("Client from " + ip + " downloaded " + file
-					+ " using " + bytes + " bytes.");
-		}
-	});
-
-To make the parser as efficient as possible, field values are always returned 
-as char[] to avoid unnecessary String allocations. If you need Strings, they are 
-easy to create.
+CloudFront Log Parser is fast.  
 
 
 Runtime Requirements
@@ -190,18 +144,6 @@ Runtime Requirements
 2.	The Buzz Media common-pars-erlib (tbm-common-parser-lib-<VER>.jar)
 	http://www.thebuzzmedia.com/software/common-parser-lib-common-parser-java-utility-library/
 	
-
-FAQ
----
-* How come values aren't Strings?
-	This was done for performance reasons. Not everyone reading the values out
-	of log files want them as Strings; they may want to write them back out to
-	another storage location immediately. We save on creating a ton of unused
-	String instances by avoiding this automatic creation.
-	
-	If you need Strings, easy, just wrap the char[] in new String(value);
-	
-
 
 History
 -------
