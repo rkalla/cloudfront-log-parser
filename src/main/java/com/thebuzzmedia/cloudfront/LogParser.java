@@ -415,6 +415,13 @@ public class LogParser {
 				continue;
 			}
 
+			if (valueIndex > activeFieldIndices.size()) {
+				System.out.println("Error, line has more fields than it should at " + valueIndex +
+						" line: " + (new String(line)).substring(index, index+length));
+				skippedFieldPositionSet.add(valueIndex);
+				continue;
+			}
+
 			// Value belonged to an active field, so store it.
 			logEntryWrapper.setFieldValue(activeFieldIndices.get(valueIndex++)
 					.intValue(), token.getValue());
