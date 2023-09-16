@@ -1,6 +1,4 @@
 Amazon CloudFront Log Parser
-http://www.thebuzzmedia.com/software/cloudfront-log-parser/
-
 
 Changelog
 ---------
@@ -18,16 +16,16 @@ Changelog
 	temporary input streams.
 	
 	* Improved the exception semantics of the parse method.
-	https://github.com/thebuzzmedia/cloudfront-log-parser/issues/2
+	https://github.com/rkalla/cloudfront-log-parser/issues/2
 	
 	* Parser is more verbal with MalformedContentException errors when the content
 	of the log file doesn't match the Amazon-defined DOWNLOAD or STREAMING 
 	CloudFront log formats.
-	https://github.com/thebuzzmedia/cloudfront-log-parser/issues/2
+	https://github.com/rkalla/cloudfront-log-parser/issues/2
 	
 	* Fixed incorrect bounds check for insertion of fields beyond what ILogEntry
 	will allow.
-	https://github.com/thebuzzmedia/cloudfront-log-parser/issues/5
+	https://github.com/rkalla/cloudfront-log-parser/issues/5
 	
 	* Fixed a handful of "tightening" bugs that didn't break the parser previously
 	but could lead to leaks or bugs down the road.
@@ -139,10 +137,8 @@ Runtime Requirements
 --------------------
 
 1.	The Buzz Media common-lib (tbm-common-lib-<VER>.jar)
-	http://www.thebuzzmedia.com/software/common-lib-common-java-utility-library/
 
 2.	The Buzz Media common-pars-erlib (tbm-common-parser-lib-<VER>.jar)
-	http://www.thebuzzmedia.com/software/common-parser-lib-common-parser-java-utility-library/
 	
 
 History
@@ -164,9 +160,3 @@ HPROF to tighten up the runtime performance and minimize object creation down to
 the bare minimum.
 
 I hope this helps folks out there.
-
-
-Contact
--------
-If you have questions, comments or bug reports for this software please contact
-us at: software@thebuzzmedia.com
