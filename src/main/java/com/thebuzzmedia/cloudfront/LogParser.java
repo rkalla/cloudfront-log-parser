@@ -216,7 +216,12 @@ public class LogParser {
 			int lfIndex = ArrayUtils.lastIndexOfNoCheck(LF, buffer, index,
 					length);
 
-			if (lfIndex == -1)
+			if (lfIndex == -1 && length < buffer.length / 2) {
+				//  read did not return enough.
+				System.out.println("reading more without processing, (read() returned less than one record)");
+				index = length;
+				continue;
+			} else if (lfIndex == -1) {
 				throw new MalformedContentException(
 						"Could not find the \\n (LINE FEED) character after scanning "
 								+ length
@@ -227,7 +232,7 @@ public class LogParser {
 								+ " bytes). The log file is likely malformed or a single log entry line is so long it won't fit easily into the current read buffer. Consider making the buffer bigger by adjust the "
 								+ BUFFER_SIZE_PROPERTY_NAME
 								+ " system property.");
-
+			}
 			// Decode the buffer contents up to our LF terminator
 			char[] content = DecodingUtils.decode(buffer,
 					DecodingUtils.ASCII_CHARSET, index, lfIndex + 1);
@@ -407,6 +412,13 @@ public class LogParser {
 			// Ensure this value didn't belong to a skipped field name
 			if (skippedFieldPositionSet.contains(Integer.valueOf(valueIndex))) {
 				valueIndex++;
+				continue;
+			}
+
+			if (valueIndex > activeFieldIndices.size()) {
+				System.out.println("Error, line has more fields than it should at " + valueIndex +
+						" line: " + (new String(line)).substring(index, index+length));
+				skippedFieldPositionSet.add(valueIndex);
 				continue;
 			}
 
